@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,7 +26,10 @@ const testConfigPath = ".././jaeger-kusto-config.json"
 func TestKustoSpanReader_GetTrace(tester *testing.T) {
 
 	testConfig := InitConfig(testConfigPath, logger)
-	kustoStore := NewStore(*testConfig, logger)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	defer gracefulShutdown(&wg, appCancel)
+	kustoStore := NewStore(*testConfig, logger, appCtx, &wg)
 	trace, _ := model.TraceIDFromString("0232d7f26e2317b1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -41,7 +45,10 @@ func TestKustoSpanReader_GetTrace(tester *testing.T) {
 func TestKustoSpanReader_GetServices(t *testing.T) {
 
 	testConfig := InitConfig(testConfigPath, logger)
-	kustoStore := NewStore(*testConfig, logger)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	defer gracefulShutdown(&wg, appCancel)
+	kustoStore := NewStore(*testConfig, logger, appCtx, &wg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -56,7 +63,10 @@ func TestKustoSpanReader_GetServices(t *testing.T) {
 func TestKustoSpanReader_GetOperations(t *testing.T) {
 
 	testConfig := InitConfig(testConfigPath, logger)
-	kustoStore := NewStore(*testConfig, logger)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	defer gracefulShutdown(&wg, appCancel)
+	kustoStore := NewStore(*testConfig, logger, appCtx, &wg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -84,7 +94,10 @@ func TestFindTraces(tester *testing.T) {
 	}
 
 	testConfig := InitConfig(testConfigPath, logger)
-	kustoStore := NewStore(*testConfig, logger)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	defer gracefulShutdown(&wg, appCancel)
+	kustoStore := NewStore(*testConfig, logger, appCtx, &wg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -99,7 +112,10 @@ func TestFindTraces(tester *testing.T) {
 
 func TestStore_DependencyReader(t *testing.T) {
 	testConfig := InitConfig(testConfigPath, logger)
-	kustoStore := NewStore(*testConfig, logger)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	defer gracefulShutdown(&wg, appCancel)
+	kustoStore := NewStore(*testConfig, logger, appCtx, &wg)
 	dependencyLinks, err := kustoStore.DependencyReader().GetDependencies(time.Now(), 168*time.Hour)
 	if err != nil {
 		logger.Error("can't find dependencyLinks", err.Error())

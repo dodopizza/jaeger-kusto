@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,9 +64,27 @@ func TestWriteSpan(tester *testing.T) {
 	}
 
 	testConfig := InitConfig(testConfigPath, logger)
-	kustoStore := NewStore(*testConfig, logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	defer gracefulShutdown(&wg, cancel)
+	kustoStore := NewStore(*testConfig, logger, ctx, &wg)
 	assert.NoError(tester, kustoStore.SpanWriter().WriteSpan(span))
 	assert.NoError(tester, kustoStore.SpanWriter().WriteSpan(span2))
 	assert.NoError(tester, kustoStore.SpanWriter().WriteSpan(span3))
 
+}
+
+func gracefulShutdown(wg *sync.WaitGroup, cancel context.CancelFunc) {
+	cancel()
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+	select {
+	case <-done:
+		return
+	case <-time.After(time.Second):
+		return
+	}
 }

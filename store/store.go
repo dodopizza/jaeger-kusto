@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"github.com/Azure/azure-kusto-go/kusto"
 	"github.com/Azure/azure-kusto-go/kusto/ingest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
@@ -8,6 +9,7 @@ import (
 	"github.com/jaegertracing/jaeger/plugin/storage/grpc/shared"
 	"github.com/jaegertracing/jaeger/storage/dependencystore"
 	"github.com/jaegertracing/jaeger/storage/spanstore"
+	"sync"
 )
 
 type store struct {
@@ -30,7 +32,7 @@ func (f *kustoFactory) Ingest(database string) (in kustoIngest, err error) {
 }
 
 // NewStore creates new Kusto store for Jaeger span storage
-func NewStore(config KustoConfig, logger hclog.Logger) shared.StoragePlugin {
+func NewStore(config KustoConfig, logger hclog.Logger, appCtx context.Context, shutdownWg *sync.WaitGroup) shared.StoragePlugin {
 
 	authorizer := kusto.Authorization{
 		Config: auth.NewClientCredentialsConfig(config.ClientID, config.ClientSecret, config.TenantID),
@@ -45,7 +47,7 @@ func NewStore(config KustoConfig, logger hclog.Logger) shared.StoragePlugin {
 
 	reader := newKustoSpanReader(&factory, config.Database)
 
-	writer := newKustoSpanWriter(&factory, logger, config.Database)
+	writer := newKustoSpanWriter(&factory, logger, config.Database, appCtx, shutdownWg)
 	store := &store{
 		dependencyStoreReader: reader,
 		reader:                reader,

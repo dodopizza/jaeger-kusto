@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-kusto-go/kusto/ingest"
@@ -18,19 +19,21 @@ type kustoIngest interface {
 }
 
 type kustoSpanWriter struct {
-	ingest kustoIngest
-	ch     chan []string
-	logger hclog.Logger
+	ingest     kustoIngest
+	ch         chan []string
+	logger     hclog.Logger
+	appCtx     context.Context
+	shutdownWg *sync.WaitGroup
 }
 
-func newKustoSpanWriter(client *kustoFactory, logger hclog.Logger, database string) *kustoSpanWriter {
+func newKustoSpanWriter(client *kustoFactory, logger hclog.Logger, database string, ctx context.Context, wg *sync.WaitGroup) *kustoSpanWriter {
 
 	in, err := client.Ingest(database)
 	if err != nil {
 		logger.Error(fmt.Sprintf("%#v", err))
 	}
 	ch := make(chan []string, 100)
-	writer := &kustoSpanWriter{in, ch, logger}
+	writer := &kustoSpanWriter{in, ch, logger, ctx, wg}
 
 	go writer.ingestCSV(ch)
 
@@ -47,6 +50,8 @@ func (k kustoSpanWriter) WriteSpan(span *model.Span) error {
 
 func (k kustoSpanWriter) ingestCSV(ch <-chan []string) {
 
+	k.shutdownWg.Add(1)
+	defer func() { k.shutdownWg.Done() }()
 	ticker := time.NewTicker(5 * time.Second)
 
 	b := &bytes.Buffer{}
@@ -55,8 +60,12 @@ func (k kustoSpanWriter) ingestCSV(ch <-chan []string) {
 
 	for {
 		select {
+		case <-k.appCtx.Done():
+			ingestBatch(k, b)
+			return
 		case buf, ok := <-ch:
 			if !ok {
+				ingestBatch(k, b)
 				return
 			}
 			if b.Len() > 1048576 {
